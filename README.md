@@ -39,8 +39,9 @@ flac_D/                    ASVspoof 5 Track 1 development audio
 flac_E_eval/               ASVspoof 5 Track 1 evaluation audio
 original-asvspoof5/        upstream documentation and provenance
   protocols/               unchanged Track 1 protocols and codec table
-protocols/capture-plan/     extension capture-plan index, schema, and job shards
-scripts/                    deterministic capture-plan generator
+protocols/capture-plan/     capture plan, acquisition guide, schema, and job shards
+config/                     acquisition configuration template
+scripts/                    capture-plan generator and acquisition executors
 LICENSE.txt                upstream license text
 ```
 
@@ -72,6 +73,12 @@ quality mapping, allocation algorithm, counts, and a SHA-256 for every shard.
 See [`protocols/capture-plan/README.md`](protocols/capture-plan/README.md) for
 the recorder contract and field semantics.
 
+Native Windows Python scripts now implement a disposable stratified pilot and
+the resumable definitive recorder for one condition at a time. Device binding,
+content-based alignment, FLAC generation, validation, failure diagnostics and
+the SQLite progress ledger are documented in
+[`protocols/capture-plan/ACQUISITION.md`](protocols/capture-plan/ACQUISITION.md).
+
 ## Integrity and provenance
 
 All 18 upstream audio archives matched the MD5 checks published by ASVspoof 5 before extraction. The source Git revision, initial import commit, exclusions, and exact counts are recorded in [`original-asvspoof5/PROVENANCE.md`](original-asvspoof5/PROVENANCE.md).
@@ -80,6 +87,6 @@ All 18 upstream audio archives matched the MD5 checks published by ASVspoof 5 be
 
 The retained source material remains subject to the ASVspoof 5 licensing, attribution, ethics, and citation requirements. See [`LICENSE.txt`](LICENSE.txt) and [`original-asvspoof5/README.txt`](original-asvspoof5/README.txt).
 
-The exact acquisition equipment binding, fixed recording configuration,
-recording script, recaptured audio, acquisition ledger, and derived release
-protocol remain to be created.
+The exact equipment bindings and fixed setup must still be approved through
+pilots for `HH`, `HL`, `LH`, and `LL`. No physical recaptured audio or final
+derived release protocol has been produced yet.

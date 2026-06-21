@@ -2,3 +2,12 @@
 methodology.tex
 .agent-context/
 
+# Local acquisition outputs and operator-specific hardware bindings.
+capture-tests/
+capture-ledgers/
+capture-failures/
+.capture-work/
+acquisition-config.*.json
+.venv-capture/
+__pycache__/
+*.pyc

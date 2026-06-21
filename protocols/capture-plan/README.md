@@ -99,9 +99,9 @@ The path and filename are explicit in each job as `output_audio_path` and
 `output_file_name`; filenames are only a convenience, and metadata rows remain
 authoritative.
 
-## Later recorder contract
+## Recorder contract
 
-A future recording script should:
+The acquisition scripts:
 
 1. load `capture-plan.json` and verify the selected shard SHA-256;
 2. require an acquisition configuration that resolves the selected condition
@@ -115,6 +115,9 @@ A future recording script should:
 Output sample rate, channel conversion, calibration, trimming, interface, and
 gain are not guessed here. They belong to the fixed acquisition configuration
 that must be documented before recording starts.
+
+The pilot and definitive Python implementations of this contract are
+documented in [`ACQUISITION.md`](ACQUISITION.md).
 
 ## Reproduction
 
