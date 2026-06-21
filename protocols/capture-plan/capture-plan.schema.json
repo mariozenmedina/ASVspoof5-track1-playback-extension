@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/asvspoof5-playback/capture-plan.schema.json",
+  "title": "ASVspoof 5 playback capture job",
+  "description": "Schema for one typed row parsed from a capture-plan TSV shard. Integer columns must be parsed from their decimal TSV representation before validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "capture_order",
+    "source_partition",
+    "source_protocol_row",
+    "source_audio_path",
+    "source_file_name",
+    "source_family_id",
+    "playback_condition",
+    "output_audio_path",
+    "output_file_name",
+    "output_format",
+    "content_origin_label",
+    "channel_label",
+    "content_channel_category",
+    "liveness_label",
+    "allocation_stratum_id",
+    "asvspoof5_speaker_id",
+    "asvspoof5_flac_file_name",
+    "asvspoof5_speaker_gender",
+    "asvspoof5_codec",
+    "asvspoof5_codec_q",
+    "asvspoof5_codec_seed",
+    "asvspoof5_attack_tag",
+    "asvspoof5_attack_label",
+    "asvspoof5_key",
+    "asvspoof5_tmp"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "pattern": "^ASV5P-[TDE]_[0-9]+-(PH|PS)-(HH|HL|LH|LL)$"
+    },
+    "capture_order": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "One-based execution order within the containing partition/condition shard."
+    },
+    "source_partition": {
+      "enum": ["train", "development", "evaluation"]
+    },
+    "source_protocol_row": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "One-based non-empty row number in the immutable ASVspoof 5 source protocol."
+    },
+    "source_audio_path": {
+      "type": "string",
+      "pattern": "^flac_(T|D|E_eval)/[TDE]_[0-9]+\\.flac$"
+    },
+    "source_file_name": {
+      "type": "string",
+      "pattern": "^[TDE]_[0-9]+\\.flac$"
+    },
+    "source_family_id": {
+      "type": "string",
+      "pattern": "^[TDE]_[0-9]+$",
+      "description": "CODEC_SEED when present; otherwise the source FLAC_FILE_NAME."
+    },
+    "playback_condition": {
+      "enum": ["HH", "HL", "LH", "LL"]
+    },
+    "output_audio_path": {
+      "type": "string",
+      "pattern": "^playback_flac/(train|development|evaluation)/(HH|HL|LH|LL)/(PH|PS)/[TDE]_[0-9]+_(PH|PS)_playback_(HH|HL|LH|LL)\\.flac$"
+    },
+    "output_file_name": {
+      "type": "string",
+      "pattern": "^[TDE]_[0-9]+_(PH|PS)_playback_(HH|HL|LH|LL)\\.flac$"
+    },
+    "output_format": {
+      "const": "flac"
+    },
+    "content_origin_label": {
+      "enum": ["human", "spoof"]
+    },
+    "channel_label": {
+      "const": "playback"
+    },
+    "content_channel_category": {
+      "enum": ["PH", "PS"]
+    },
+    "liveness_label": {
+      "const": "playback"
+    },
+    "allocation_stratum_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "asvspoof5_speaker_id": {
+      "type": "string",
+      "pattern": "^[TDE]_[0-9]+$"
+    },
+    "asvspoof5_flac_file_name": {
+      "type": "string",
+      "pattern": "^[TDE]_[0-9]+$"
+    },
+    "asvspoof5_speaker_gender": {
+      "enum": ["F", "M"]
+    },
+    "asvspoof5_codec": {
+      "type": "string",
+      "pattern": "^(-|C[0-9]{2})$"
+    },
+    "asvspoof5_codec_q": {
+      "type": "string",
+      "pattern": "^(-|[0-9]+)$"
+    },
+    "asvspoof5_codec_seed": {
+      "type": "string",
+      "pattern": "^(-|[TDE]_[0-9]+)$"
+    },
+    "asvspoof5_attack_tag": {
+      "type": "string",
+      "pattern": "^(-|AC[0-9]+)$"
+    },
+    "asvspoof5_attack_label": {
+      "type": "string",
+      "pattern": "^(bonafide|A[0-9]+)$"
+    },
+    "asvspoof5_key": {
+      "enum": ["bonafide", "spoof"]
+    },
+    "asvspoof5_tmp": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "asvspoof5_key": { "const": "bonafide" }
+        },
+        "required": ["asvspoof5_key"]
+      },
+      "then": {
+        "properties": {
+          "content_origin_label": { "const": "human" },
+          "content_channel_category": { "const": "PH" },
+          "asvspoof5_attack_label": { "const": "bonafide" }
+        }
+      },
+      "else": {
+        "properties": {
+          "content_origin_label": { "const": "spoof" },
+          "content_channel_category": { "const": "PS" }
+        }
+      }
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 
 This repository is the working source tree for a playback-controlled extension of ASVspoof 5. The intended dataset studies speech liveness under a presentation-constrained threat model: an attacker cannot inject digital audio and must reproduce a signal through a loudspeaker for microphone recapture.
 
-The project currently contains only the prepared, unchanged ASVspoof 5 Track 1 source material. Sample selection, condition assignment, playback/recapture, derived metadata, and release protocols have not been created yet.
+The project contains the prepared, unchanged ASVspoof 5 Track 1 source material
+and a versioned plan for assigning every retained source to one playback and
+recapture condition. Physical acquisition has not started.
 
 ## Intended task
 
@@ -12,7 +14,9 @@ The extension separates content origin from presentation channel:
 - `PH`: bona fide source speech after playback and recapture;
 - `PS`: spoof source speech after playback and recapture.
 
-The main liveness task is `CH` versus `{PH, PS}`. Original ASVspoof 5 annotations remain authoritative and will be preserved unchanged; the extension will add new channel-related fields later.
+The main liveness task is `CH` versus `{PH, PS}`. Original ASVspoof 5
+annotations remain authoritative and unchanged; the capture plan adds the
+channel-related fields needed for the future derived dataset.
 
 ## Prepared source snapshot
 
@@ -35,10 +39,38 @@ flac_D/                    ASVspoof 5 Track 1 development audio
 flac_E_eval/               ASVspoof 5 Track 1 evaluation audio
 original-asvspoof5/        upstream documentation and provenance
   protocols/               unchanged Track 1 protocols and codec table
+protocols/capture-plan/     extension capture-plan index, schema, and job shards
+scripts/                    deterministic capture-plan generator
 LICENSE.txt                upstream license text
 ```
 
 The root documentation describes this extension. Upstream ASVspoof 5 documentation is preserved under `original-asvspoof5/` so future release files can be developed without overwriting the source records.
+
+## Playback capture plan
+
+The distributable capture plan is indexed by
+[`protocols/capture-plan/capture-plan.json`](protocols/capture-plan/capture-plan.json).
+It selects all 1,004,081 retained Track 1 sources and assigns each to exactly
+one of `HH`, `HL`, `LH`, or `LL`. Assignments are deterministic, stratified,
+and keep all codec variants sharing one `CODEC_SEED` in the same condition.
+
+| Condition | Capture jobs |
+| --- | ---: |
+| `HH` | 251,026 |
+| `HL` | 251,015 |
+| `LH` | 251,019 |
+| `LL` | 251,021 |
+
+The plan contains 188,819 `PH` jobs from bona fide sources and 815,262 `PS`
+jobs from spoof sources. Each bona fide source remains the unchanged `CH`
+reference as well as supplying its `PH` capture job; no duplicate clean-audio
+job is created.
+
+Job rows are stored as twelve streamable TSV shards by source partition and
+playback condition. The index records the labels, destination paths, equipment
+quality mapping, allocation algorithm, counts, and a SHA-256 for every shard.
+See [`protocols/capture-plan/README.md`](protocols/capture-plan/README.md) for
+the recorder contract and field semantics.
 
 ## Integrity and provenance
 
@@ -48,5 +80,6 @@ All 18 upstream audio archives matched the MD5 checks published by ASVspoof 5 be
 
 The retained source material remains subject to the ASVspoof 5 licensing, attribution, ethics, and citation requirements. See [`LICENSE.txt`](LICENSE.txt) and [`original-asvspoof5/README.txt`](original-asvspoof5/README.txt).
 
-This README is intentionally preliminary and must be updated as the derived dataset, acquisition protocol, metadata, and distribution structure are finalized.
-
+The exact acquisition equipment binding, fixed recording configuration,
+recording script, recaptured audio, acquisition ledger, and derived release
+protocol remain to be created.

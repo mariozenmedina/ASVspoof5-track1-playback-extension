@@ -1,0 +1,423 @@
+{
+  "manifest_version": "1.0.0",
+  "title": "ASVspoof 5 Track 1 playback recapture plan",
+  "scope": {
+    "source_database": "ASVspoof 5",
+    "source_track": 1,
+    "selection_criterion": "all_retained_track_1_rows",
+    "selected_source_rows": 1004081,
+    "excluded_source_rows": 0,
+    "partitions_preserved": true
+  },
+  "source": {
+    "upstream_revision": "5d4b1565bc0e3e79343af0b5eacc0ea395405d59",
+    "immutable": true,
+    "protocols": [
+      {
+        "partition": "train",
+        "path": "original-asvspoof5/protocols/ASVspoof5.train.tsv",
+        "rows": 182357,
+        "audio_directory": "flac_T"
+      },
+      {
+        "partition": "development",
+        "path": "original-asvspoof5/protocols/ASVspoof5.dev.track_1.tsv",
+        "rows": 140950,
+        "audio_directory": "flac_D"
+      },
+      {
+        "partition": "evaluation",
+        "path": "original-asvspoof5/protocols/ASVspoof5.eval.track_1.tsv",
+        "rows": 680774,
+        "audio_directory": "flac_E_eval"
+      }
+    ]
+  },
+  "file_format": {
+    "index": "json",
+    "jobs": "tsv",
+    "encoding": "UTF-8",
+    "line_ending": "LF",
+    "delimiter": "TAB",
+    "header": true,
+    "schema": "capture-plan.schema.json",
+    "columns": [
+      "job_id",
+      "capture_order",
+      "source_partition",
+      "source_protocol_row",
+      "source_audio_path",
+      "source_file_name",
+      "source_family_id",
+      "playback_condition",
+      "output_audio_path",
+      "output_file_name",
+      "output_format",
+      "content_origin_label",
+      "channel_label",
+      "content_channel_category",
+      "liveness_label",
+      "allocation_stratum_id",
+      "asvspoof5_speaker_id",
+      "asvspoof5_flac_file_name",
+      "asvspoof5_speaker_gender",
+      "asvspoof5_codec",
+      "asvspoof5_codec_q",
+      "asvspoof5_codec_seed",
+      "asvspoof5_attack_tag",
+      "asvspoof5_attack_label",
+      "asvspoof5_key",
+      "asvspoof5_tmp"
+    ],
+    "sha256_scope": "complete shard bytes, including header and LF line endings"
+  },
+  "capture_action": "playback_and_recapture",
+  "output": {
+    "root_directory": "playback_flac",
+    "directory_template": "playback_flac/<source_partition>/<playback_condition>/<content_channel_category>/",
+    "filename_template": "<asvspoof5_flac_file_name>_<content_channel_category>_playback_<playback_condition>.flac",
+    "required_format": "flac",
+    "source_files_must_not_be_modified": true
+  },
+  "clean_reference_policy": {
+    "bonafide_source_role": "Each bona fide source remains the immutable CH clean reference and is also the source of exactly one PH capture job.",
+    "clean_copy_job_created": false,
+    "spoof_source_role": "Each spoof source is a CS source reference and becomes an operational PS sample only after playback and recapture."
+  },
+  "labels": {
+    "PH": {
+      "content_origin_label": "human",
+      "channel_label": "playback",
+      "liveness_label": "playback"
+    },
+    "PS": {
+      "content_origin_label": "spoof",
+      "channel_label": "playback",
+      "liveness_label": "playback"
+    }
+  },
+  "playback_conditions": {
+    "HH": {
+      "playback_device_quality": "high",
+      "recording_device_quality": "high",
+      "methodology_playback_reference": "Yamaha HS5",
+      "methodology_recording_reference": "Audio-Technica AT2020"
+    },
+    "HL": {
+      "playback_device_quality": "high",
+      "recording_device_quality": "low",
+      "methodology_playback_reference": "Yamaha HS5",
+      "methodology_recording_reference": null
+    },
+    "LH": {
+      "playback_device_quality": "low",
+      "recording_device_quality": "high",
+      "methodology_playback_reference": null,
+      "methodology_recording_reference": "Audio-Technica AT2020"
+    },
+    "LL": {
+      "playback_device_quality": "low",
+      "recording_device_quality": "low",
+      "methodology_playback_reference": null,
+      "methodology_recording_reference": null
+    }
+  },
+  "equipment_binding": {
+    "status": "deferred_to_acquisition_configuration",
+    "exact_low_quality_devices": null,
+    "audio_interface_or_soundcard": null,
+    "device_serials": null,
+    "rule": "The future recorder must bind each condition label to a documented equipment chain without changing sample assignments."
+  },
+  "allocation": {
+    "seed": "asvspoof5-playback-extension-condition-allocation-v1",
+    "assignment_unit": "source family: CODEC_SEED when present, otherwise FLAC_FILE_NAME",
+    "family_integrity": "All codec variants of one source family are assigned to the same playback condition.",
+    "strata": [
+      "source_partition",
+      "asvspoof5_speaker_id",
+      "asvspoof5_speaker_gender",
+      "asvspoof5_key",
+      "asvspoof5_attack_label",
+      "asvspoof5_attack_tag",
+      "codec_family_shape"
+    ],
+    "codec_family_shape": "uncoded-only; uncoded-pair:<CODEC>:<CODEC_Q>; or full-codec-set",
+    "algorithm": "Process strata in lexical order; within each stratum, sort source families by SHA-256(seed|family_id), order conditions by the running attack, KEY, speaker, and partition job counts with a SHA-256 tie-break, then assign round-robin.",
+    "maximum_family_count_difference_per_stratum": 1,
+    "audit": {
+      "train": {
+        "sourceFamilies": 182357,
+        "strata": 6016,
+        "maximumFamilyCountDifferenceWithinStratum": 1,
+        "maximumJobCountDifferenceWithinStratum": 1
+      },
+      "development": {
+        "sourceFamilies": 140950,
+        "strata": 8089,
+        "maximumFamilyCountDifferenceWithinStratum": 1,
+        "maximumJobCountDifferenceWithinStratum": 1
+      },
+      "evaluation": {
+        "sourceFamilies": 171602,
+        "strata": 141535,
+        "maximumFamilyCountDifferenceWithinStratum": 1,
+        "maximumJobCountDifferenceWithinStratum": 12
+      }
+    }
+  },
+  "execution_order": {
+    "conditions": [
+      "HH",
+      "HL",
+      "LH",
+      "LL"
+    ],
+    "partitions": [
+      "train",
+      "development",
+      "evaluation"
+    ],
+    "capture_order_scope": "within one partition/condition shard"
+  },
+  "totals": {
+    "jobs": 1004081,
+    "categories": {
+      "PH": 188819,
+      "PS": 815262
+    },
+    "content_origins": {
+      "human": 188819,
+      "spoof": 815262
+    },
+    "playback_conditions": {
+      "HH": 251026,
+      "HL": 251015,
+      "LH": 251019,
+      "LL": 251021
+    },
+    "partitions": {
+      "train": {
+        "jobs": 182357,
+        "categories": {
+          "PH": 18797,
+          "PS": 163560
+        },
+        "playback_conditions": {
+          "HH": 45589,
+          "HL": 45589,
+          "LH": 45589,
+          "LL": 45590
+        }
+      },
+      "development": {
+        "jobs": 140950,
+        "categories": {
+          "PH": 31334,
+          "PS": 109616
+        },
+        "playback_conditions": {
+          "HH": 35237,
+          "HL": 35238,
+          "LH": 35238,
+          "LL": 35237
+        }
+      },
+      "evaluation": {
+        "jobs": 680774,
+        "categories": {
+          "PH": 138688,
+          "PS": 542086
+        },
+        "playback_conditions": {
+          "HH": 170200,
+          "HL": 170188,
+          "LH": 170192,
+          "LL": 170194
+        }
+      }
+    }
+  },
+  "shards": [
+    {
+      "partition": "train",
+      "playback_condition": "HH",
+      "path": "jobs/train.HH.tsv",
+      "row_count": 45589,
+      "categories": {
+        "PH": 4699,
+        "PS": 40890
+      },
+      "content_origins": {
+        "human": 4699,
+        "spoof": 40890
+      },
+      "sha256": "0d8ac49c8483f8c0c031965453c67e9135a818123636d1927def82c97bcefe35"
+    },
+    {
+      "partition": "train",
+      "playback_condition": "HL",
+      "path": "jobs/train.HL.tsv",
+      "row_count": 45589,
+      "categories": {
+        "PH": 4699,
+        "PS": 40890
+      },
+      "content_origins": {
+        "human": 4699,
+        "spoof": 40890
+      },
+      "sha256": "fb4395ab6c13c71c8aa5d2d02053b84a622c96a63cbd50174b744d90d8985285"
+    },
+    {
+      "partition": "train",
+      "playback_condition": "LH",
+      "path": "jobs/train.LH.tsv",
+      "row_count": 45589,
+      "categories": {
+        "PH": 4699,
+        "PS": 40890
+      },
+      "content_origins": {
+        "human": 4699,
+        "spoof": 40890
+      },
+      "sha256": "be8e172e8a9fcfeb1a64f555cb86f2e1bae5ee6c8760b049530d5aa7bc0cc80a"
+    },
+    {
+      "partition": "train",
+      "playback_condition": "LL",
+      "path": "jobs/train.LL.tsv",
+      "row_count": 45590,
+      "categories": {
+        "PH": 4700,
+        "PS": 40890
+      },
+      "content_origins": {
+        "human": 4700,
+        "spoof": 40890
+      },
+      "sha256": "e3e08305551bc7475a40504cee53c128a6d3103d3b99c73ce180a22828bccda9"
+    },
+    {
+      "partition": "development",
+      "playback_condition": "HH",
+      "path": "jobs/development.HH.tsv",
+      "row_count": 35237,
+      "categories": {
+        "PH": 7833,
+        "PS": 27404
+      },
+      "content_origins": {
+        "human": 7833,
+        "spoof": 27404
+      },
+      "sha256": "246f7733942ece1d8f4877100403d9892e090c54ff5d7fc5bf88226501a99c05"
+    },
+    {
+      "partition": "development",
+      "playback_condition": "HL",
+      "path": "jobs/development.HL.tsv",
+      "row_count": 35238,
+      "categories": {
+        "PH": 7834,
+        "PS": 27404
+      },
+      "content_origins": {
+        "human": 7834,
+        "spoof": 27404
+      },
+      "sha256": "3fad5a870c628492f4c5a985eb35f123aabd1d47349ba15b36224a94ece30346"
+    },
+    {
+      "partition": "development",
+      "playback_condition": "LH",
+      "path": "jobs/development.LH.tsv",
+      "row_count": 35238,
+      "categories": {
+        "PH": 7834,
+        "PS": 27404
+      },
+      "content_origins": {
+        "human": 7834,
+        "spoof": 27404
+      },
+      "sha256": "eadba0ea2287a3a8effb8d7472fc116a46648853bc13ab9df3f94fea5b2dc462"
+    },
+    {
+      "partition": "development",
+      "playback_condition": "LL",
+      "path": "jobs/development.LL.tsv",
+      "row_count": 35237,
+      "categories": {
+        "PH": 7833,
+        "PS": 27404
+      },
+      "content_origins": {
+        "human": 7833,
+        "spoof": 27404
+      },
+      "sha256": "6da082a2aa0462928202853ff11e2e325eabe1a2178c301804c06f56c20a4569"
+    },
+    {
+      "partition": "evaluation",
+      "playback_condition": "HH",
+      "path": "jobs/evaluation.HH.tsv",
+      "row_count": 170200,
+      "categories": {
+        "PH": 34672,
+        "PS": 135528
+      },
+      "content_origins": {
+        "human": 34672,
+        "spoof": 135528
+      },
+      "sha256": "e3a6c5e69de051c475acd41dc9778a2e290af95ab85e4ecc165806a0f6ee09de"
+    },
+    {
+      "partition": "evaluation",
+      "playback_condition": "HL",
+      "path": "jobs/evaluation.HL.tsv",
+      "row_count": 170188,
+      "categories": {
+        "PH": 34672,
+        "PS": 135516
+      },
+      "content_origins": {
+        "human": 34672,
+        "spoof": 135516
+      },
+      "sha256": "20ef92b38b227bcbb3a357a32f57eeaa48182496935289ecf2608a5a7838bed3"
+    },
+    {
+      "partition": "evaluation",
+      "playback_condition": "LH",
+      "path": "jobs/evaluation.LH.tsv",
+      "row_count": 170192,
+      "categories": {
+        "PH": 34672,
+        "PS": 135520
+      },
+      "content_origins": {
+        "human": 34672,
+        "spoof": 135520
+      },
+      "sha256": "2554a6519839161b929af1d0324fa3bc350df677587cd923c3fc34010f51e6d3"
+    },
+    {
+      "partition": "evaluation",
+      "playback_condition": "LL",
+      "path": "jobs/evaluation.LL.tsv",
+      "row_count": 170194,
+      "categories": {
+        "PH": 34672,
+        "PS": 135522
+      },
+      "content_origins": {
+        "human": 34672,
+        "spoof": 135522
+      },
+      "sha256": "c62478e7235177ccf721d09202cd00bd6fe727b8d774066e73ff2abac42f0234"
+    }
+  ]
+}
