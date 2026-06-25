@@ -82,7 +82,9 @@ python scripts/capture_test.py `
 
 `--clean` is deliberately restricted to `capture-tests/<condition>` and can
 never delete `playback_flac`, source FLACs, protocols or another condition.
-Without `--clean`, the script refuses to overwrite an existing pilot.
+Use `--clean-all` only when all local pilot folders under `capture-tests/`
+should be discarded before starting the selected pilot. Without either cleanup
+flag, the script refuses to overwrite an existing pilot.
 
 Pilot artifacts are local and ignored by Git:
 
@@ -146,6 +148,22 @@ the recorder does not reopen the Windows input/output endpoints for every job.
 Input and output selectors must therefore resolve through the same host API,
 normally Windows WASAPI.
 
+For WASAPI endpoints, the default configuration requests exclusive mode,
+warms the stream briefly before the first job, and avoids shared-mixer startup
+artifacts. If a consumer device cannot be opened in exclusive mode, set
+`"wasapi_exclusive_mode": false` in the condition configuration or pass
+`--no-wasapi-exclusive` during a pilot.
+
+`never_drop_input` is left disabled by default because some Windows/PortAudio
+device combinations reject it with `PaErrorCode -9995 Invalid flag`. Enable it
+only after a successful preflight with the target interface.
+
+Disable Windows input enhancements, automatic gain control, echo cancellation
+and noise suppression for the recording endpoint before approving a pilot.
+If `fixed_setup.windows_audio_enhancements_disabled` is not `true`, the
+preflight prints a warning because these effects can gate playback audio,
+produce silence, or make the waveform sound noise-suppressed.
+
 Progress is committed after every job to
 `capture-ledgers/<condition>/capture-ledger.sqlite3`. A rerun skips completed
 jobs whose final file exists. Failed jobs are attempted according to the fixed
@@ -179,6 +197,7 @@ SHA-256. Detailed diagnostics and raw audio are reserved for pilot runs and
 failures.
 
 The amplitude bounds are `null` in the example. Use the pilot results to define
-condition-specific fixed bounds if desired, then freeze the configuration. The
-definitive recorder reports and validates; it never changes speaker volume or
-microphone gain automatically.
+condition-specific fixed bounds if desired, then freeze the configuration. If
+the pilot reports clipping, lower the fixed physical playback level or
+microphone gain and rerun the pilot. The definitive recorder reports and
+validates; it never changes speaker volume or microphone gain automatically.

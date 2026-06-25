@@ -15,6 +15,7 @@ import os
 import sqlite3
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -193,6 +194,7 @@ def default_acquisition_config(
                 "host_api": output_host_api,
                 "physical_device": playback_equipment,
                 "audio_interface": audio_interface,
+                "channel": 1,
                 "stream_channels": 2,
                 "duplicate_mono_to_all_channels": True,
             },
@@ -204,6 +206,9 @@ def default_acquisition_config(
             "pre_roll_ms": 500,
             "post_roll_ms": 750,
             "latency": "high",
+            "stream_warmup_ms": 750,
+            "never_drop_input": False,
+            "wasapi_exclusive_mode": True,
         },
         "alignment": {
             "analysis_sample_rate_hz": 4000,
@@ -289,6 +294,18 @@ def validate_acquisition_config(
         1, int(input_device.get("stream_channels", 0)) + 1
     ):
         raise ConfigurationError("The selected input channel is outside the stream.")
+    output_device = devices.get("output", {})
+    output_channel = int(output_device.get("channel", 1))
+    if output_channel not in range(
+        1, int(output_device.get("stream_channels", 0)) + 1
+    ):
+        raise ConfigurationError("The selected output channel is outside the stream.")
+    for direction in ("input", "output"):
+        duplicate = devices.get(direction, {}).get("duplicate_mono_to_all_channels")
+        if duplicate is not None and not isinstance(duplicate, bool):
+            raise ConfigurationError(
+                f"devices.{direction}.duplicate_mono_to_all_channels must be boolean."
+            )
     capture = config.get("capture", {})
     for key in ("sample_rate_hz", "output_sample_rate_hz"):
         if int(capture.get(key, 0)) <= 0:
@@ -298,6 +315,11 @@ def validate_acquisition_config(
         or float(capture.get("post_roll_ms", -1)) < 0
     ):
         raise ConfigurationError("Pre-roll and post-roll cannot be negative.")
+    if float(capture.get("stream_warmup_ms", 0)) < 0:
+        raise ConfigurationError("capture.stream_warmup_ms cannot be negative.")
+    for key in ("never_drop_input", "wasapi_exclusive_mode"):
+        if not isinstance(capture.get(key, False), bool):
+            raise ConfigurationError(f"capture.{key} must be boolean.")
     if int(config.get("execution", {}).get("maximum_attempts_per_job", 0)) < 1:
         raise ConfigurationError("At least one attempt per job is required.")
     if int(config.get("execution", {}).get("maximum_consecutive_failed_jobs", 0)) < 1:
@@ -462,6 +484,12 @@ def print_preflight(
         f"final: {config['capture']['output_sample_rate_hz']} Hz "
         f"{config['capture']['output_subtype']} mono"
     )
+    print(
+        "Stream guard: "
+        f"warmup={config['capture'].get('stream_warmup_ms', 0)} ms, "
+        f"never_drop_input={config['capture'].get('never_drop_input')}, "
+        f"WASAPI exclusive={config['capture'].get('wasapi_exclusive_mode')}"
+    )
     setup = config.get("fixed_setup", {})
     print(
         "Fixed setup: "
@@ -469,6 +497,14 @@ def print_preflight(
         f"speaker volume={setup.get('speaker_volume')!r}, "
         f"microphone gain={setup.get('microphone_gain')!r}"
     )
+    if (
+        "WASAPI" in str(resolved["input"]["host_api"]).upper()
+        and setup.get("windows_audio_enhancements_disabled") is not True
+    ):
+        print(
+            "WARNING: Windows input enhancements/noise suppression are not "
+            "confirmed disabled; they can mute or gate playback captures."
+        )
 
 
 def require_operator_confirmation(condition: str) -> None:
@@ -630,19 +666,28 @@ class AudioCaptureSession:
         input_channels = int(self.config["devices"]["input"]["stream_channels"])
         output_channels = int(self.config["devices"]["output"]["stream_channels"])
         try:
-            self.stream = sd.Stream(
-                samplerate=int(self.config["capture"]["sample_rate_hz"]),
-                device=(
+            stream_options = {
+                "samplerate": int(self.config["capture"]["sample_rate_hz"]),
+                "device": (
                     self.resolved_devices["input"]["index"],
                     self.resolved_devices["output"]["index"],
                 ),
-                channels=(input_channels, output_channels),
-                dtype=("float32", "float32"),
-                latency=self.config["capture"].get("latency", "high"),
-                callback=self._callback,
-                prime_output_buffers_using_stream_callback=False,
-            )
+                "channels": (input_channels, output_channels),
+                "dtype": ("float32", "float32"),
+                "latency": self.config["capture"].get("latency", "high"),
+                "callback": self._callback,
+                "prime_output_buffers_using_stream_callback": False,
+            }
+            if bool(self.config["capture"].get("never_drop_input", False)):
+                stream_options["never_drop_input"] = True
+            extra_settings = self._stream_extra_settings(sd)
+            if extra_settings is not None:
+                stream_options["extra_settings"] = extra_settings
+            self.stream = sd.Stream(**stream_options)
             self.stream.start()
+            warmup = float(self.config["capture"].get("stream_warmup_ms", 0))
+            if warmup > 0:
+                time.sleep(warmup / 1000)
         except Exception as exc:
             if self.stream is not None:
                 self.stream.close()
@@ -651,6 +696,20 @@ class AudioCaptureSession:
                 f"Could not open the persistent full-duplex audio stream: {exc}"
             ) from exc
         return self
+
+    def _stream_extra_settings(self, sd: Any) -> Any | None:
+        if not bool(self.config["capture"].get("wasapi_exclusive_mode", False)):
+            return None
+        host_api = str(self.resolved_devices["input"]["host_api"])
+        if "WASAPI" not in host_api.upper():
+            return None
+        settings_factory = getattr(sd, "WasapiSettings", None)
+        if settings_factory is None:
+            raise ConfigurationError(
+                "The installed sounddevice package does not expose "
+                "WasapiSettings for exclusive-mode capture."
+            )
+        return settings_factory(exclusive=True)
 
     def __exit__(self, *_: Any) -> None:
         if self.stream is not None:
@@ -755,14 +814,18 @@ def capture_job(
     source_playback = _resample(source, int(source_rate), capture_rate)
     pre_frames = round(float(config["capture"]["pre_roll_ms"]) * capture_rate / 1000)
     post_frames = round(float(config["capture"]["post_roll_ms"]) * capture_rate / 1000)
-    output_channels = int(config["devices"]["output"]["stream_channels"])
+    output_config = config["devices"]["output"]
+    output_channels = int(output_config["stream_channels"])
     playback = np.zeros(
         (pre_frames + source_playback.size + post_frames, output_channels),
         dtype=np.float32,
     )
-    playback[pre_frames : pre_frames + source_playback.size, :] = source_playback[
-        :, None
-    ]
+    playback_slice = slice(pre_frames, pre_frames + source_playback.size)
+    if bool(output_config.get("duplicate_mono_to_all_channels", True)):
+        playback[playback_slice, :] = source_playback[:, None]
+    else:
+        output_channel = int(output_config.get("channel", 1)) - 1
+        playback[playback_slice, output_channel] = source_playback
     selected_input = int(config["devices"]["input"]["channel"]) - 1
     raw_multichannel = None
     raw = None

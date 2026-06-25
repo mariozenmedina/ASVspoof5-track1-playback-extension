@@ -15,6 +15,7 @@
       "host_api": "Windows WASAPI",
       "physical_device": "Yamaha HS5",
       "audio_interface": "REPLACE_WITH_AUDIO_INTERFACE",
+      "channel": 1,
       "stream_channels": 2,
       "duplicate_mono_to_all_channels": true
     }
@@ -25,7 +26,10 @@
     "output_subtype": "PCM_16",
     "pre_roll_ms": 500,
     "post_roll_ms": 750,
-    "latency": "high"
+    "latency": "high",
+    "stream_warmup_ms": 750,
+    "never_drop_input": false,
+    "wasapi_exclusive_mode": true
   },
   "alignment": {
     "analysis_sample_rate_hz": 4000,

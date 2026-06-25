@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import secrets
 import shutil
+import stat
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -62,17 +64,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--audio-interface")
     parser.add_argument("--input-channel", type=int)
     parser.add_argument("--input-stream-channels", type=int)
+    parser.add_argument("--output-channel", type=int)
     parser.add_argument("--output-stream-channels", type=int)
     parser.add_argument("--capture-rate", type=int)
     parser.add_argument("--output-rate", type=int)
+    parser.add_argument("--stream-warmup-ms", type=float)
     parser.add_argument("--distance")
     parser.add_argument("--orientation")
     parser.add_argument("--speaker-volume")
     parser.add_argument("--microphone-gain")
     parser.add_argument(
+        "--wasapi-exclusive",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Open Windows WASAPI endpoints in exclusive mode when possible "
+            "(default comes from the acquisition config)."
+        ),
+    )
+    parser.add_argument(
+        "--never-drop-input",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Request PortAudio's never-drop-input stream flag. Leave disabled "
+            "when a device reports PaErrorCode -9995 Invalid flag."
+        ),
+    )
+    parser.add_argument(
+        "--windows-audio-enhancements-disabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Record whether Windows input enhancements/noise suppression are disabled.",
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
-        help="Safely remove only capture-tests/<condition> before a new pilot.",
+        help="Safely remove the whole capture-tests/<condition> pilot folder.",
+    )
+    parser.add_argument(
+        "--clean-all",
+        action="store_true",
+        help="Safely remove the whole local capture-tests folder before the pilot.",
     )
     parser.add_argument(
         "--plan-only",
@@ -92,13 +125,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _retry_remove_readonly(func: Any, path: str, _exc_info: Any) -> None:
+    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    func(path)
+
+
+def _remove_tree(target: Path) -> None:
+    if not target.exists():
+        return
+    shutil.rmtree(target, onerror=_retry_remove_readonly)
+    if target.exists():
+        leftovers = list(target.rglob("*"))[:8]
+        preview = ", ".join(
+            str(path.relative_to(target)).replace("\\", "/") for path in leftovers
+        )
+        raise ConfigurationError(
+            f"Cleanup left files under {target}"
+            + (f": {preview}" if preview else ".")
+        )
+
+
 def safe_clean_condition(condition: str) -> None:
     root = TEST_ROOT.resolve()
     target = (TEST_ROOT / condition).resolve()
     if target == root or root not in target.parents or target.name not in CONDITIONS:
         raise ConfigurationError(f"Refusing unsafe test cleanup: {target}")
-    if target.exists():
-        shutil.rmtree(target)
+    _remove_tree(target)
+
+
+def safe_clean_all() -> None:
+    repository_root = REPOSITORY_ROOT.resolve()
+    root = TEST_ROOT.resolve()
+    if root == repository_root or root.parent != repository_root or root.name != "capture-tests":
+        raise ConfigurationError(f"Refusing unsafe full test cleanup: {root}")
+    _remove_tree(root)
 
 
 def build_overrides(args: argparse.Namespace) -> dict[str, Any]:
@@ -115,18 +175,28 @@ def build_overrides(args: argparse.Namespace) -> dict[str, Any]:
         "host_api": args.output_host_api,
         "physical_device": args.playback_equipment,
         "audio_interface": args.audio_interface,
+        "channel": args.output_channel,
         "stream_channels": args.output_stream_channels,
     }
     capture_values = {
         "sample_rate_hz": args.capture_rate,
         "output_sample_rate_hz": args.output_rate,
+        "stream_warmup_ms": args.stream_warmup_ms,
     }
+    if args.wasapi_exclusive is not None:
+        capture_values["wasapi_exclusive_mode"] = args.wasapi_exclusive
+    if args.never_drop_input is not None:
+        capture_values["never_drop_input"] = args.never_drop_input
     setup_values = {
         "speaker_microphone_distance": args.distance,
         "speaker_microphone_orientation": args.orientation,
         "speaker_volume": args.speaker_volume,
         "microphone_gain": args.microphone_gain,
     }
+    if args.windows_audio_enhancements_disabled is not None:
+        setup_values["windows_audio_enhancements_disabled"] = (
+            args.windows_audio_enhancements_disabled
+        )
 
     def compact(values: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in values.items() if value is not None}
@@ -244,9 +314,13 @@ def main() -> int:
         raise ConfigurationError(
             "--condition is required unless --list-devices is used."
         )
+    if args.clean and args.clean_all:
+        raise ConfigurationError("Use only one of --clean or --clean-all.")
     condition = args.condition
     test_directory = TEST_ROOT / condition
-    if args.clean:
+    if args.clean_all:
+        safe_clean_all()
+    elif args.clean:
         safe_clean_condition(condition)
     if test_directory.exists() and any(test_directory.iterdir()):
         raise ConfigurationError(
