@@ -108,6 +108,11 @@ def parse_args() -> argparse.Namespace:
         help="Safely remove the whole local capture-tests folder before the pilot.",
     )
     parser.add_argument(
+        "--clean-only",
+        action="store_true",
+        help="Clean the requested test folder and exit without writing a new pilot.",
+    )
+    parser.add_argument(
         "--plan-only",
         action="store_true",
         help="Generate the pilot selection without opening audio devices.",
@@ -316,12 +321,17 @@ def main() -> int:
         )
     if args.clean and args.clean_all:
         raise ConfigurationError("Use only one of --clean or --clean-all.")
+    if args.clean_only and not (args.clean or args.clean_all):
+        raise ConfigurationError("--clean-only requires --clean or --clean-all.")
     condition = args.condition
     test_directory = TEST_ROOT / condition
     if args.clean_all:
         safe_clean_all()
     elif args.clean:
         safe_clean_condition(condition)
+    if args.clean_only:
+        print("Pilot test artifacts cleaned.")
+        return 0
     if test_directory.exists() and any(test_directory.iterdir()):
         raise ConfigurationError(
             f"{test_directory} already contains a pilot. Use --clean for a new one."

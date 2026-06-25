@@ -85,6 +85,8 @@ never delete `playback_flac`, source FLACs, protocols or another condition.
 Use `--clean-all` only when all local pilot folders under `capture-tests/`
 should be discarded before starting the selected pilot. Without either cleanup
 flag, the script refuses to overwrite an existing pilot.
+Use `--clean-only` together with `--clean` or `--clean-all` when you want to
+delete local pilot artifacts and exit without writing a new `test-plan.tsv`.
 
 Pilot artifacts are local and ignored by Git:
 
