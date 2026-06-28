@@ -11,3 +11,8 @@ acquisition-config.*.json
 .venv-capture/
 __pycache__/
 *.pyc
+
+# Local ASVspoof 5 source audio. Kept on disk when available, never pushed to GitHub.
+flac_T/
+flac_D/
+flac_E_eval/
