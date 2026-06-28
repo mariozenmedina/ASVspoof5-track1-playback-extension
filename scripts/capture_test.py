@@ -28,6 +28,7 @@ from capture_common import (
     list_audio_devices,
     load_acquisition_config,
     load_plan_index,
+    print_capture_result,
     print_preflight,
     read_shard_rows,
     require_operator_confirmation,
@@ -105,12 +106,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clean-all",
         action="store_true",
-        help="Safely remove the whole local capture-tests folder before the pilot.",
+        help=(
+            "Safely remove the whole local capture-tests folder, with or "
+            "without starting a new pilot."
+        ),
     )
     parser.add_argument(
         "--clean-only",
         action="store_true",
-        help="Clean the requested test folder and exit without writing a new pilot.",
+        help="Clean the requested test artifacts and exit without writing a new pilot.",
     )
     parser.add_argument(
         "--plan-only",
@@ -315,14 +319,20 @@ def main() -> int:
     if args.list_devices:
         list_audio_devices()
         return 0
-    if not args.condition:
-        raise ConfigurationError(
-            "--condition is required unless --list-devices is used."
-        )
     if args.clean and args.clean_all:
         raise ConfigurationError("Use only one of --clean or --clean-all.")
     if args.clean_only and not (args.clean or args.clean_all):
         raise ConfigurationError("--clean-only requires --clean or --clean-all.")
+    if args.clean and not args.condition:
+        raise ConfigurationError("--clean requires --condition.")
+    if args.clean_all and not args.condition:
+        safe_clean_all()
+        print("All pilot test artifacts cleaned.")
+        return 0
+    if not args.condition:
+        raise ConfigurationError(
+            "--condition is required unless --list-devices or --clean-all is used."
+        )
     condition = args.condition
     test_directory = TEST_ROOT / condition
     if args.clean_all:
@@ -394,7 +404,7 @@ def main() -> int:
         "selection": selection_summary,
     }
     write_json(test_directory / "session.json", session_snapshot)
-    maximum_attempts = int(config["execution"]["maximum_attempts_per_job"])
+    attempts_per_run = 1
     results_path = test_directory / "attempt-results.jsonl"
     failures = 0
     with (
@@ -405,37 +415,45 @@ def main() -> int:
         for order, job in enumerate(selected, start=1):
             print(f"[{order}/{len(selected)}] {job['job_id']}", flush=True)
             completed = False
-            for attempt in range(1, maximum_attempts + 1):
-                output_path = (
-                    test_directory
-                    / "recordings"
-                    / job["source_partition"]
-                    / job["content_channel_category"]
-                    / job["output_file_name"]
+            output_path = (
+                test_directory
+                / "recordings"
+                / job["source_partition"]
+                / job["content_channel_category"]
+                / job["output_file_name"]
+            )
+            attempt = ledger.start_attempt(job, output_path, current_session)
+            attempt_total = max(attempts_per_run, attempt)
+            raw_path = (
+                test_directory
+                / "raw"
+                / job["source_partition"]
+                / job["content_channel_category"]
+                / f"{job['job_id']}.attempt-{attempt}.wav"
+            )
+            try:
+                outcome = capture_job(
+                    job,
+                    config,
+                    output_path,
+                    audio_session=audio_session,
+                    raw_path=raw_path,
+                    keep_raw_on_success=True,
+                    publish_invalid_final=True,
                 )
-                raw_path = (
-                    test_directory
-                    / "raw"
-                    / job["source_partition"]
-                    / job["content_channel_category"]
-                    / f"{job['job_id']}.attempt-{attempt}.wav"
-                )
-                ledger.start_attempt(job, output_path, current_session)
-                try:
-                    outcome = capture_job(
+                append_attempt_result(results_path, job, attempt, outcome=outcome)
+                if not outcome.validation_errors:
+                    ledger.complete(outcome, current_session)
+                    print_capture_result(
                         job,
-                        config,
-                        output_path,
-                        audio_session=audio_session,
-                        raw_path=raw_path,
-                        keep_raw_on_success=True,
-                        publish_invalid_final=True,
+                        "SUCCESS",
+                        attempt,
+                        attempt_total,
+                        output_path=outcome.output_path,
+                        outcome=outcome,
                     )
-                    append_attempt_result(results_path, job, attempt, outcome=outcome)
-                    if not outcome.validation_errors:
-                        ledger.complete(outcome, current_session)
-                        completed = True
-                        break
+                    completed = True
+                else:
                     error = "; ".join(outcome.validation_errors)
                     ledger.fail(job["job_id"], current_session, error, outcome=outcome)
                     write_failure_diagnostic(
@@ -445,19 +463,41 @@ def main() -> int:
                         outcome=outcome,
                         attempt=attempt,
                     )
-                except KeyboardInterrupt:
-                    ledger.fail(job["job_id"], current_session, "interrupted")
-                    raise
-                except Exception as exc:
-                    error = f"{type(exc).__name__}: {exc}"
-                    append_attempt_result(results_path, job, attempt, error=error)
-                    ledger.fail(job["job_id"], current_session, error)
-                    write_failure_diagnostic(
-                        test_directory / "diagnostics",
+                    print_capture_result(
                         job,
-                        error,
-                        attempt=attempt,
+                        "FAILED",
+                        attempt,
+                        attempt_total,
+                        outcome=outcome,
+                        error=error,
                     )
+            except KeyboardInterrupt:
+                ledger.fail(job["job_id"], current_session, "interrupted")
+                print_capture_result(
+                    job,
+                    "FAILED",
+                    attempt,
+                    attempt_total,
+                    error="interrupted",
+                )
+                raise
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                append_attempt_result(results_path, job, attempt, error=error)
+                ledger.fail(job["job_id"], current_session, error)
+                write_failure_diagnostic(
+                    test_directory / "diagnostics",
+                    job,
+                    error,
+                    attempt=attempt,
+                )
+                print_capture_result(
+                    job,
+                    "FAILED",
+                    attempt,
+                    attempt_total,
+                    error=error,
+                )
             if not completed:
                 failures += 1
         counts = ledger.status_counts()

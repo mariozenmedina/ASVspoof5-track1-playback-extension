@@ -226,7 +226,7 @@ def default_acquisition_config(
             "amplitude_delta_db_max": None,
         },
         "execution": {
-            "maximum_attempts_per_job": 2,
+            "maximum_attempts_per_job": 1,
             "maximum_consecutive_failed_jobs": 3,
         },
         "fixed_setup": {
@@ -320,8 +320,12 @@ def validate_acquisition_config(
     for key in ("never_drop_input", "wasapi_exclusive_mode"):
         if not isinstance(capture.get(key, False), bool):
             raise ConfigurationError(f"capture.{key} must be boolean.")
-    if int(config.get("execution", {}).get("maximum_attempts_per_job", 0)) < 1:
-        raise ConfigurationError("At least one attempt per job is required.")
+    if int(config.get("execution", {}).get("maximum_attempts_per_job", 0)) != 1:
+        raise ConfigurationError(
+            "execution.maximum_attempts_per_job must be 1. "
+            "Run a later pass with --retry-failed instead of retrying the same "
+            "audio immediately."
+        )
     if int(config.get("execution", {}).get("maximum_consecutive_failed_jobs", 0)) < 1:
         raise ConfigurationError(
             "execution.maximum_consecutive_failed_jobs must be positive."
@@ -1162,6 +1166,53 @@ def write_failure_diagnostic(
         },
     )
     return path
+
+
+def _status_path(path: Path | str | None) -> str | None:
+    if path is None:
+        return None
+    if isinstance(path, Path):
+        try:
+            path = path.relative_to(REPOSITORY_ROOT)
+        except ValueError:
+            pass
+    return str(path).replace("\\", "/")
+
+
+def _status_text(value: str) -> str:
+    return " ".join(str(value).split())
+
+
+def print_capture_result(
+    job: dict[str, str],
+    status: str,
+    attempt: int,
+    attempt_total: int,
+    *,
+    output_path: Path | str | None = None,
+    outcome: CaptureOutcome | None = None,
+    message: str | None = None,
+    error: str | None = None,
+) -> None:
+    parts = [
+        f"[{status}]",
+        f"job={job['job_id']}",
+        f"attempt={attempt}/{attempt_total}",
+        f"partition={job['source_partition']}",
+        f"category={job['content_channel_category']}",
+        f"source={job['source_audio_path']}",
+    ]
+    output = _status_path(output_path)
+    if output:
+        parts.append(f"output={output}")
+    if outcome and not outcome.validation_errors:
+        parts.append(f"align={outcome.alignment_score:.4f}")
+        parts.append(f"delta={outcome.amplitude_delta_db:.2f}dB")
+    if message:
+        parts.append(f"message={_status_text(message)}")
+    if error:
+        parts.append(f"error={_status_text(error)}")
+    print(" ".join(parts), flush=True)
 
 
 def print_progress(current: int, total: int, job: dict[str, str]) -> None:

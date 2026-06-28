@@ -35,6 +35,9 @@ Copy `config/acquisition.example.json` to an ignored condition-specific file,
 for example `acquisition-config.HH.json`, and replace all placeholders. The
 configuration condition must match the command condition. The later pilot can
 also build this configuration from command-line device and setup arguments.
+Keep `execution.maximum_attempts_per_job` set to `1`; additional attempts are
+made by running a later failed-job pass rather than retrying the same audio
+immediately.
 
 ## Disposable pilot
 
@@ -83,8 +86,10 @@ python scripts/capture_test.py `
 `--clean` is deliberately restricted to `capture-tests/<condition>` and can
 never delete `playback_flac`, source FLACs, protocols or another condition.
 Use `--clean-all` only when all local pilot folders under `capture-tests/`
-should be discarded before starting the selected pilot. Without either cleanup
-flag, the script refuses to overwrite an existing pilot.
+should be discarded. It can run without `--condition` when cleanup is the whole
+operation, or with `--condition` when cleanup should be followed by a new
+selected pilot. Without either cleanup flag, the script refuses to overwrite an
+existing pilot.
 Use `--clean-only` together with `--clean` or `--clean-all` when you want to
 delete local pilot artifacts and exit without writing a new `test-plan.tsv`.
 
@@ -106,6 +111,12 @@ capture-tests/HH/
 Raw captures and candidate final FLACs are retained for the pilot even when a
 validation fails. Running again with `--clean` chooses a new random seed unless
 `--seed` is specified.
+
+Each capture attempt prints one console line with `SUCCESS` or `FAILED`, the
+job identifier, source path, attempt number and either the final output path or
+the validation/exception summary.
+The pilot makes one attempt per selected job in each run. If a job fails, the
+failure is recorded and execution moves to the next selected job.
 
 ## Definitive condition run
 
@@ -168,8 +179,11 @@ produce silence, or make the waveform sound noise-suppressed.
 
 Progress is committed after every job to
 `capture-ledgers/<condition>/capture-ledger.sqlite3`. A rerun skips completed
-jobs whose final file exists. Failed jobs are attempted according to the fixed
-configuration and can later be explicitly retried with `--retry-failed`.
+jobs whose final file exists. Failed jobs are not retried in the same pass; the
+executor records the failure and moves to the next job. Run a later pass with
+`--retry-failed` to give each failed job one new attempt.
+Skipped completed jobs are counted in periodic progress output but are not
+printed one by one.
 Successful production captures do not retain the raw WAV. A failed capture
 keeps its raw WAV and a JSON diagnostic under `capture-failures/<condition>/`.
 

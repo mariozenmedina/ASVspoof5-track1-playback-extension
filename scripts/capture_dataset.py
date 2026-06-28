@@ -20,6 +20,7 @@ from capture_common import (
     list_audio_devices,
     load_acquisition_config,
     load_plan_index,
+    print_capture_result,
     print_preflight,
     require_operator_confirmation,
     resolve_and_check_devices,
@@ -58,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--retry-failed",
         action="store_true",
-        help="Retry jobs that already exhausted the configured attempt limit.",
+        help="Give one new attempt to jobs already marked as failed.",
     )
     parser.add_argument(
         "--yes",
@@ -137,7 +138,7 @@ def main() -> int:
             "capture_plan_manifest_version": index["manifest_version"],
         },
     )
-    maximum_attempts = int(config["execution"]["maximum_attempts_per_job"])
+    attempts_per_run = 1
     maximum_consecutive_failures = int(
         config["execution"]["maximum_consecutive_failed_jobs"]
     )
@@ -163,48 +164,51 @@ def main() -> int:
                 skipped += 1
                 continue
             existing_attempts = int(existing["attempts"]) if existing else 0
-            if (
-                existing
-                and existing["status"] == "failed"
-                and existing_attempts >= maximum_attempts
-                and not args.retry_failed
-            ):
+            if existing and existing["status"] == "failed" and not args.retry_failed:
                 failures += 1
+                print_capture_result(
+                    job,
+                    "FAILED",
+                    existing_attempts,
+                    max(attempts_per_run, existing_attempts),
+                    error="already failed; use --retry-failed to try again",
+                )
                 continue
 
             succeeded = False
-            attempts_this_run = 0
-            allowed_attempts = (
-                maximum_attempts
-                if args.retry_failed
-                else max(0, maximum_attempts - existing_attempts)
+            attempt = ledger.start_attempt(job, output_path, current_session)
+            attempt_total = max(attempts_per_run, attempt)
+            raw_path = (
+                failure_directory
+                / "raw"
+                / job["source_partition"]
+                / job["content_channel_category"]
+                / f"{job['job_id']}.attempt-{attempt}.wav"
             )
-            while attempts_this_run < allowed_attempts:
-                attempts_this_run += 1
-                attempt = ledger.start_attempt(job, output_path, current_session)
-                raw_path = (
-                    failure_directory
-                    / "raw"
-                    / job["source_partition"]
-                    / job["content_channel_category"]
-                    / f"{job['job_id']}.attempt-{attempt}.wav"
+            try:
+                outcome = capture_job(
+                    job,
+                    config,
+                    output_path,
+                    audio_session=audio_session,
+                    raw_path=raw_path,
+                    keep_raw_on_success=False,
+                    publish_invalid_final=False,
                 )
-                try:
-                    outcome = capture_job(
+                if not outcome.validation_errors:
+                    ledger.complete(outcome, current_session)
+                    completed_now += 1
+                    consecutive_failures = 0
+                    print_capture_result(
                         job,
-                        config,
-                        output_path,
-                        audio_session=audio_session,
-                        raw_path=raw_path,
-                        keep_raw_on_success=False,
-                        publish_invalid_final=False,
+                        "SUCCESS",
+                        attempt,
+                        attempt_total,
+                        output_path=outcome.output_path,
+                        outcome=outcome,
                     )
-                    if not outcome.validation_errors:
-                        ledger.complete(outcome, current_session)
-                        completed_now += 1
-                        consecutive_failures = 0
-                        succeeded = True
-                        break
+                    succeeded = True
+                else:
                     error = "; ".join(outcome.validation_errors)
                     ledger.fail(job["job_id"], current_session, error, outcome=outcome)
                     write_failure_diagnostic(
@@ -214,19 +218,41 @@ def main() -> int:
                         outcome=outcome,
                         attempt=attempt,
                     )
-                except KeyboardInterrupt:
-                    ledger.fail(job["job_id"], current_session, "interrupted")
-                    print("Capture interrupted; progress is preserved in SQLite.")
-                    return 130
-                except Exception as exc:
-                    error = f"{type(exc).__name__}: {exc}"
-                    ledger.fail(job["job_id"], current_session, error)
-                    write_failure_diagnostic(
-                        failure_directory / "diagnostics",
+                    print_capture_result(
                         job,
-                        error,
-                        attempt=attempt,
+                        "FAILED",
+                        attempt,
+                        attempt_total,
+                        outcome=outcome,
+                        error=error,
                     )
+            except KeyboardInterrupt:
+                ledger.fail(job["job_id"], current_session, "interrupted")
+                print_capture_result(
+                    job,
+                    "FAILED",
+                    attempt,
+                    attempt_total,
+                    error="interrupted",
+                )
+                print("Capture interrupted; progress is preserved in SQLite.")
+                return 130
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                ledger.fail(job["job_id"], current_session, error)
+                write_failure_diagnostic(
+                    failure_directory / "diagnostics",
+                    job,
+                    error,
+                    attempt=attempt,
+                )
+                print_capture_result(
+                    job,
+                    "FAILED",
+                    attempt,
+                    attempt_total,
+                    error=error,
+                )
             if not succeeded:
                 failures += 1
                 consecutive_failures += 1

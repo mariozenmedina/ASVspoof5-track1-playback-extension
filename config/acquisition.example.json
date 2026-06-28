@@ -47,7 +47,7 @@
     "amplitude_delta_db_max": null
   },
   "execution": {
-    "maximum_attempts_per_job": 2,
+    "maximum_attempts_per_job": 1,
     "maximum_consecutive_failed_jobs": 3
   },
   "fixed_setup": {
